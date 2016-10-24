@@ -134,9 +134,14 @@ pub struct ImportEntry<'a> {
     pub contents: ImportEntryContents,
 }
 
+pub struct FunctionSection<'a>(&'a [u8]);
+
+pub struct FunctionEntryIterator<'a>(&'a [u8]);
+
 pub enum SectionContent<'a> {
     Type(TypeSection<'a>),
     Import(ImportSection<'a>),
+    Function(FunctionSection<'a>),
     Start(u32),
 }
 
@@ -217,6 +222,9 @@ impl<'a> Section<'a> {
             },
             SectionType::Import => {
                 Some(SectionContent::Import(ImportSection(self.payload)))
+            },
+            SectionType::Function => {
+                Some(SectionContent::Function(FunctionSection(self.payload)))
             },
             SectionType::Start => {
                 let mut r = self.payload;
@@ -357,5 +365,19 @@ impl ResizableLimits {
             initial: initial as u32,
             maximum: maximum.map(|x| x as u32),
         })
+    }
+}
+
+impl<'a> FunctionSection<'a> {
+    pub fn types(&self) -> FunctionEntryIterator<'a> {
+        FunctionEntryIterator(self.0)
+    }
+}
+
+impl<'a> Iterator for FunctionEntryIterator<'a> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<u32> {
+        read_varuint(&mut self.0).ok().map(|x| x as u32)
     }
 }
