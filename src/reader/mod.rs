@@ -68,3 +68,18 @@ pub mod modules;
 pub use self::modules::{
     Module, SectionsIterator, Section, SectionContent
 };
+
+pub mod tables;
+pub use self::tables::{
+    TableSection, TableEntryIterator, TableEntry
+};
+
+pub mod memories;
+pub use self::memories::{
+    MemorySection, MemoryEntryIterator, MemoryEntry
+};
+
+pub mod globals;
+pub use self::globals::{
+    GlobalSection, GlobalEntryIterator, GlobalEntry
+};

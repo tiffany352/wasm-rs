@@ -21,6 +21,9 @@ pub enum SectionContent<'a> {
     Type(TypeSection<'a>),
     Import(ImportSection<'a>),
     Function(FunctionSection<'a>),
+    Table(TableSection<'a>),
+    Memory(MemorySection<'a>),
+    Global(GlobalSection<'a>),
     Start(u32),
 }
 
@@ -98,6 +101,30 @@ impl<'a> Section<'a> {
                 let mut iter = self.payload;
                 let count = try!(read_varuint(&mut iter)) as usize;
                 Ok(SectionContent::Function(FunctionSection(self.payload, count)))
+            },
+            SectionType::Table => {
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as u32;
+                Ok(SectionContent::Table(TableSection {
+                    count: count,
+                    entries_raw: iter
+                }))
+            },
+            SectionType::Memory => {
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as u32;
+                Ok(SectionContent::Memory(MemorySection {
+                    count: count,
+                    entries_raw: iter
+                }))
+            },
+            SectionType::Global => {
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as u32;
+                Ok(SectionContent::Global(GlobalSection {
+                    count: count,
+                    entries_raw: iter
+                }))
             },
             SectionType::Start => {
                 let mut r = self.payload;

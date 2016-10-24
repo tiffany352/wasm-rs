@@ -92,7 +92,7 @@ impl<'a> Iterator for ImportEntryIterator<'a> {
 }
 
 impl ResizableLimits {
-    fn parse(mut iter: &mut &[u8]) -> Result<ResizableLimits, Error> {
+    pub fn parse(mut iter: &mut &[u8]) -> Result<ResizableLimits, Error> {
         let flags = try!(read_varuint(iter));
         let initial = try!(read_varuint(iter));
         let maximum = if flags & 0x1 != 0 {
