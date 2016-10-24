@@ -70,6 +70,27 @@ impl ValueType {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum ExternalKind {
+    Function = 0,
+    Table = 1,
+    Memory = 2,
+    Global = 3,
+}
+
+impl ExternalKind {
+    fn from_int(v: u8) -> Option<ExternalKind> {
+        Some(match v {
+            0 => ExternalKind::Function,
+            1 => ExternalKind::Table,
+            2 => ExternalKind::Memory,
+            3 => ExternalKind::Global,
+            _ => return None,
+        })
+    }
+}
+
 pub struct TypeSection<'a>(&'a [u8]);
 
 pub struct TypeEntryIterator<'a>(&'a [u8]);
@@ -85,8 +106,37 @@ pub struct FunctionType<'a> {
     pub return_type: Option<ValueType>,
 }
 
+pub struct ImportSection<'a>(&'a [u8]);
+
+pub struct ImportEntryIterator<'a>(&'a [u8]);
+
+pub struct ResizableLimits {
+    pub initial: u32,
+    pub maximum: Option<u32>,
+}
+
+pub enum ImportEntryContents {
+    Function(u32),
+    Table {
+        element_type: u8,
+        limits: ResizableLimits
+    },
+    Memory(ResizableLimits),
+    Global {
+        ty: ValueType,
+        mutable: bool
+    },
+}
+
+pub struct ImportEntry<'a> {
+    pub module: &'a str,
+    pub field: &'a str,
+    pub contents: ImportEntryContents,
+}
+
 pub enum SectionContent<'a> {
     Type(TypeSection<'a>),
+    Import(ImportSection<'a>),
     Start(u32),
 }
 
@@ -165,6 +215,9 @@ impl<'a> Section<'a> {
             SectionType::Type => {
                 Some(SectionContent::Type(TypeSection(self.payload)))
             },
+            SectionType::Import => {
+                Some(SectionContent::Import(ImportSection(self.payload)))
+            },
             SectionType::Start => {
                 let mut r = self.payload;
                 let index = try_opt!(read_varuint(&mut r).ok());
@@ -231,5 +284,78 @@ impl<'a> Iterator for ParamsIterator<'a> {
         let res = self.0[0];
         self.0 = &self.0[1..];
         Some(try_opt!(ValueType::from_int(res)))
+    }
+}
+
+impl<'a> ImportSection<'a> {
+    pub fn entries(&self) -> ImportEntryIterator<'a> {
+        ImportEntryIterator(self.0)
+    }
+}
+
+impl<'a> Iterator for ImportEntryIterator<'a> {
+    type Item = ImportEntry<'a>;
+
+    fn next(&mut self) -> Option<ImportEntry<'a>> {
+        let mlen = try_opt!(read_varuint(&mut self.0).ok());
+        let module = {
+            let res = &self.0[..mlen as usize];
+            self.0 = &self.0[mlen as usize..];
+            try_opt!(from_utf8(res).ok())
+        };
+        let flen = try_opt!(read_varuint(&mut self.0).ok());
+        let field = {
+            let res = &self.0[..flen as usize];
+            self.0 = &self.0[flen as usize..];
+            try_opt!(from_utf8(res).ok())
+        };
+        let mut kind = [0; 1];
+        try_opt!((&mut self.0).read_exact(&mut kind).ok());
+        let kind = try_opt!(ExternalKind::from_int(kind[0]));
+        let contents = match kind {
+            ExternalKind::Function => ImportEntryContents::Function(try_opt!(
+                read_varuint(&mut self.0).ok()) as u32
+            ),
+            ExternalKind::Table => ImportEntryContents::Table {
+                element_type: {
+                    let mut ty = [0; 1];
+                    try_opt!((&mut self.0).read_exact(&mut ty).ok());
+                    ty[0]
+                },
+                limits: try_opt!(ResizableLimits::parse(&mut self.0)),
+            },
+            ExternalKind::Memory => ImportEntryContents::Memory(
+                try_opt!(ResizableLimits::parse(&mut self.0))
+            ),
+            ExternalKind::Global => ImportEntryContents::Global {
+                ty: {
+                    let mut ty = [0; 1];
+                    try_opt!((&mut self.0).read_exact(&mut ty).ok());
+                    try_opt!(ValueType::from_int(ty[0]))
+                },
+                mutable: try_opt!(read_varuint(&mut self.0).ok()) != 0,
+            },
+        };
+        Some(ImportEntry {
+            module: module,
+            field: field,
+            contents: contents,
+        })
+    }
+}
+
+impl ResizableLimits {
+    fn parse(mut iter: &mut &[u8]) -> Option<ResizableLimits> {
+        let flags = try_opt!(read_varuint(iter).ok());
+        let initial = try_opt!(read_varuint(iter).ok());
+        let maximum = if flags & 0x1 != 0 {
+            Some(try_opt!(read_varuint(iter).ok()))
+        } else {
+            None
+        };
+        Some(ResizableLimits {
+            initial: initial as u32,
+            maximum: maximum.map(|x| x as u32),
+        })
     }
 }
