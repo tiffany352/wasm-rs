@@ -2,12 +2,46 @@ use leb128::read::unsigned as read_varuint;
 use std::str::from_utf8;
 use byteorder::{ReadBytesExt, LittleEndian};
 use std::io::Read;
+use std::io;
 
 macro_rules! try_opt {
     ($ex:expr) => {
         match $ex {
-            Some(x) => x,
-            None => return None
+            Ok(x) => x,
+            Err(e) => return Some(Err(e.into()))
+        }
+    }
+}
+
+quick_error! {
+    #[derive(Debug)]
+    pub enum Error {
+        NotWasm(err: io::Error) {
+            cause(err)
+            description("Not a valid WebAssembly binary")
+            display("Not a valid WebAssembly binary: {}", err)
+        }
+        Io(err: io::Error) {
+            description("IO error")
+            cause(err)
+            display("{}", err)
+            from()
+        }
+        Leb128(err: ::leb128::read::Error) {
+            description("Malformed LEB128 integer")
+            cause(err)
+            display("Malformed LEB128 integer: {}", err)
+            from()
+        }
+        UnknownVariant(of: &'static str) {
+            description("Unknown enum variant")
+            display("Unknown enum variant for {}", of)
+        }
+        Utf8(err: ::std::str::Utf8Error) {
+            description("UTF-8 error")
+            cause(err)
+            display("UTF-8 error: {}", err)
+            from()
         }
     }
 }
@@ -159,14 +193,16 @@ pub struct Module<'a> {
 pub struct SectionsIterator<'a>(&'a [u8]);
 
 impl<'a> Module<'a> {
-    pub fn new(mut stream: &'a [u8]) -> Option<Module<'a>> {
+    pub fn new(mut stream: &'a [u8]) -> Result<Module<'a>, Error> {
         let mut magic = [0; 4];
-        try_opt!((&mut stream).read_exact(&mut magic).ok());
+        try!((&mut stream).read_exact(&mut magic).map_err(Error::NotWasm));
         if &magic != b"\0asm" {
-            return None
+            return Err(Error::NotWasm(io::Error::new(
+                io::ErrorKind::InvalidData, "Magic number did not match"
+            )))
         }
-        let version = try_opt!((&mut stream).read_u32::<LittleEndian>().ok());
-        Some(Module {
+        let version = try!((&mut stream).read_u32::<LittleEndian>());
+        Ok(Module {
             version: version,
             payload: stream
         })
@@ -178,15 +214,15 @@ impl<'a> Module<'a> {
 }
 
 impl<'a> Iterator for SectionsIterator<'a> {
-    type Item = Section<'a>;
+    type Item = Result<Section<'a>, Error>;
 
-    fn next(&mut self) -> Option<Section<'a>> {
-        let id = try_opt!(read_varuint(&mut self.0).ok());
-        let id = try_opt!(SectionType::from_int(id as u8));
-        let plen = try_opt!(read_varuint(&mut self.0).ok());
+    fn next(&mut self) -> Option<Result<Section<'a>, Error>> {
+        let id = try_opt!(read_varuint(&mut self.0));
+        let id = try_opt!(SectionType::from_int(id as u8).ok_or(Error::UnknownVariant("section type")));
+        let plen = try_opt!(read_varuint(&mut self.0));
         let start = self.0.len() as u64;
         let nlen = if id == SectionType::Named {
-            try_opt!(read_varuint(&mut self.0).ok())
+            try_opt!(read_varuint(&mut self.0))
         } else {
             0
         };
@@ -205,33 +241,32 @@ impl<'a> Iterator for SectionsIterator<'a> {
             self.0 = &self.0[plen as usize..];
             res
         };
-        Some(Section {
+        Some(Ok(Section {
             id: id,
-            name: try_opt!(from_utf8(name).ok()),
+            name: try_opt!(from_utf8(name)),
             payload: payload,
-        })
+        }))
     }
 }
 
 impl<'a> Section<'a> {
-    pub fn content(&self) -> Option<SectionContent<'a>> {
+    pub fn content(&self) -> Result<SectionContent<'a>, Error> {
         match self.id {
-            SectionType::Named => None,
             SectionType::Type => {
-                Some(SectionContent::Type(TypeSection(self.payload)))
+                Ok(SectionContent::Type(TypeSection(self.payload)))
             },
             SectionType::Import => {
-                Some(SectionContent::Import(ImportSection(self.payload)))
+                Ok(SectionContent::Import(ImportSection(self.payload)))
             },
             SectionType::Function => {
-                Some(SectionContent::Function(FunctionSection(self.payload)))
+                Ok(SectionContent::Function(FunctionSection(self.payload)))
             },
             SectionType::Start => {
                 let mut r = self.payload;
-                let index = try_opt!(read_varuint(&mut r).ok());
-                Some(SectionContent::Start(index as u32))
+                let index = try!(read_varuint(&mut r));
+                Ok(SectionContent::Start(index as u32))
             },
-            _ => None
+            _ => Err(Error::UnknownVariant("section type"))
         }
     }
 }
@@ -243,36 +278,42 @@ impl<'a> TypeSection<'a> {
 }
 
 impl<'a> Iterator for TypeEntryIterator<'a> {
-    type Item = TypeEntry<'a>;
+    type Item = Result<TypeEntry<'a>, Error>;
 
-    fn next(&mut self) -> Option<TypeEntry<'a>> {
-        let form = try_opt!(read_varuint(&mut self.0).ok());
+    fn next(&mut self) -> Option<Result<TypeEntry<'a>, Error>> {
+        let form = try_opt!(read_varuint(&mut self.0));
         if form != 0x40 {
-            return None
+            return Some(Err(Error::UnknownVariant("type entry form")))
         }
-        let param_count = try_opt!(read_varuint(&mut self.0).ok());
+        let param_count = try_opt!(read_varuint(&mut self.0));
         let params = if param_count > self.0.len() as u64 {
-            return None
+            return Some(Err(Error::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "param_count is larger than remaining space"
+            ))))
         } else {
             let res = &self.0[..param_count as usize];
             self.0 = &self.0[param_count as usize..];
             res
         };
-        let return_count = try_opt!(read_varuint(&mut self.0).ok());
+        let return_count = try_opt!(read_varuint(&mut self.0));
         let return_ty = if return_count > 0 {
             if self.0.len() < 1 {
-                return None
+                return Some(Err(Error::Io(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "return_count is larger than remaining space"
+                ))))
             }
             let res = self.0[0];
             self.0 = &self.0[1..];
-            Some(try_opt!(ValueType::from_int(res)))
+            Some(try_opt!(ValueType::from_int(res).ok_or(Error::UnknownVariant("value type"))))
         } else {
             None
         };
-        Some(TypeEntry::Function(FunctionType {
+        Some(Ok(TypeEntry::Function(FunctionType {
             params_raw: params,
             return_type: return_ty
-        }))
+        })))
     }
 }
 
@@ -283,15 +324,15 @@ impl<'a> FunctionType<'a> {
 }
 
 impl<'a> Iterator for ParamsIterator<'a> {
-    type Item = ValueType;
+    type Item = Result<ValueType, Error>;
 
-    fn next(&mut self) -> Option<ValueType> {
+    fn next(&mut self) -> Option<Result<ValueType, Error>> {
         if self.0.len() < 1 {
             return None
         }
         let res = self.0[0];
         self.0 = &self.0[1..];
-        Some(try_opt!(ValueType::from_int(res)))
+        Some(Ok(try_opt!(ValueType::from_int(res).ok_or(Error::UnknownVariant("value type")))))
     }
 }
 
@@ -302,32 +343,32 @@ impl<'a> ImportSection<'a> {
 }
 
 impl<'a> Iterator for ImportEntryIterator<'a> {
-    type Item = ImportEntry<'a>;
+    type Item = Result<ImportEntry<'a>, Error>;
 
-    fn next(&mut self) -> Option<ImportEntry<'a>> {
-        let mlen = try_opt!(read_varuint(&mut self.0).ok());
+    fn next(&mut self) -> Option<Result<ImportEntry<'a>, Error>> {
+        let mlen = try_opt!(read_varuint(&mut self.0));
         let module = {
             let res = &self.0[..mlen as usize];
             self.0 = &self.0[mlen as usize..];
-            try_opt!(from_utf8(res).ok())
+            try_opt!(from_utf8(res))
         };
-        let flen = try_opt!(read_varuint(&mut self.0).ok());
+        let flen = try_opt!(read_varuint(&mut self.0));
         let field = {
             let res = &self.0[..flen as usize];
             self.0 = &self.0[flen as usize..];
-            try_opt!(from_utf8(res).ok())
+            try_opt!(from_utf8(res))
         };
         let mut kind = [0; 1];
-        try_opt!((&mut self.0).read_exact(&mut kind).ok());
-        let kind = try_opt!(ExternalKind::from_int(kind[0]));
+        try_opt!((&mut self.0).read_exact(&mut kind));
+        let kind = try_opt!(ExternalKind::from_int(kind[0]).ok_or(Error::UnknownVariant("external kind")));
         let contents = match kind {
             ExternalKind::Function => ImportEntryContents::Function(try_opt!(
-                read_varuint(&mut self.0).ok()) as u32
+                read_varuint(&mut self.0)) as u32
             ),
             ExternalKind::Table => ImportEntryContents::Table {
                 element_type: {
                     let mut ty = [0; 1];
-                    try_opt!((&mut self.0).read_exact(&mut ty).ok());
+                    try_opt!((&mut self.0).read_exact(&mut ty));
                     ty[0]
                 },
                 limits: try_opt!(ResizableLimits::parse(&mut self.0)),
@@ -338,30 +379,30 @@ impl<'a> Iterator for ImportEntryIterator<'a> {
             ExternalKind::Global => ImportEntryContents::Global {
                 ty: {
                     let mut ty = [0; 1];
-                    try_opt!((&mut self.0).read_exact(&mut ty).ok());
-                    try_opt!(ValueType::from_int(ty[0]))
+                    try_opt!((&mut self.0).read_exact(&mut ty));
+                    try_opt!(ValueType::from_int(ty[0]).ok_or(Error::UnknownVariant("value type")))
                 },
-                mutable: try_opt!(read_varuint(&mut self.0).ok()) != 0,
+                mutable: try_opt!(read_varuint(&mut self.0)) != 0,
             },
         };
-        Some(ImportEntry {
+        Some(Ok(ImportEntry {
             module: module,
             field: field,
             contents: contents,
-        })
+        }))
     }
 }
 
 impl ResizableLimits {
-    fn parse(mut iter: &mut &[u8]) -> Option<ResizableLimits> {
-        let flags = try_opt!(read_varuint(iter).ok());
-        let initial = try_opt!(read_varuint(iter).ok());
+    fn parse(mut iter: &mut &[u8]) -> Result<ResizableLimits, Error> {
+        let flags = try!(read_varuint(iter));
+        let initial = try!(read_varuint(iter));
         let maximum = if flags & 0x1 != 0 {
-            Some(try_opt!(read_varuint(iter).ok()))
+            Some(try!(read_varuint(iter)))
         } else {
             None
         };
-        Some(ResizableLimits {
+        Ok(ResizableLimits {
             initial: initial as u32,
             maximum: maximum.map(|x| x as u32),
         })
@@ -375,9 +416,9 @@ impl<'a> FunctionSection<'a> {
 }
 
 impl<'a> Iterator for FunctionEntryIterator<'a> {
-    type Item = u32;
+    type Item = Result<u32, Error>;
 
-    fn next(&mut self) -> Option<u32> {
-        read_varuint(&mut self.0).ok().map(|x| x as u32)
+    fn next(&mut self) -> Option<Result<u32, Error>> {
+        Some(read_varuint(&mut self.0).map(|x| x as u32).map_err(|x| x.into()))
     }
 }
