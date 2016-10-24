@@ -125,24 +125,25 @@ impl ExternalKind {
     }
 }
 
-pub struct TypeSection<'a>(&'a [u8]);
+pub struct TypeSection<'a>(&'a [u8], usize);
 
-pub struct TypeEntryIterator<'a>(&'a [u8]);
+pub struct TypeEntryIterator<'a>(&'a [u8], usize);
 
 pub enum TypeEntry<'a> {
     Function(FunctionType<'a>),
 }
 
-pub struct ParamsIterator<'a>(&'a [u8]);
+pub struct ParamsIterator<'a>(&'a [u8], usize);
 
 pub struct FunctionType<'a> {
+    params_count: usize,
     params_raw: &'a [u8],
     pub return_type: Option<ValueType>,
 }
 
-pub struct ImportSection<'a>(&'a [u8]);
+pub struct ImportSection<'a>(&'a [u8], usize);
 
-pub struct ImportEntryIterator<'a>(&'a [u8]);
+pub struct ImportEntryIterator<'a>(&'a [u8], usize);
 
 pub struct ResizableLimits {
     pub initial: u32,
@@ -168,9 +169,9 @@ pub struct ImportEntry<'a> {
     pub contents: ImportEntryContents,
 }
 
-pub struct FunctionSection<'a>(&'a [u8]);
+pub struct FunctionSection<'a>(&'a [u8], usize);
 
-pub struct FunctionEntryIterator<'a>(&'a [u8]);
+pub struct FunctionEntryIterator<'a>(&'a [u8], usize);
 
 pub enum SectionContent<'a> {
     Type(TypeSection<'a>),
@@ -253,13 +254,19 @@ impl<'a> Section<'a> {
     pub fn content(&self) -> Result<SectionContent<'a>, Error> {
         match self.id {
             SectionType::Type => {
-                Ok(SectionContent::Type(TypeSection(self.payload)))
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as usize;
+                Ok(SectionContent::Type(TypeSection(iter, count)))
             },
             SectionType::Import => {
-                Ok(SectionContent::Import(ImportSection(self.payload)))
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as usize;
+                Ok(SectionContent::Import(ImportSection(self.payload, count)))
             },
             SectionType::Function => {
-                Ok(SectionContent::Function(FunctionSection(self.payload)))
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as usize;
+                Ok(SectionContent::Function(FunctionSection(self.payload, count)))
             },
             SectionType::Start => {
                 let mut r = self.payload;
@@ -273,7 +280,7 @@ impl<'a> Section<'a> {
 
 impl<'a> TypeSection<'a> {
     pub fn entries(&self) -> TypeEntryIterator<'a> {
-        TypeEntryIterator(self.0)
+        TypeEntryIterator(self.0, self.1)
     }
 }
 
@@ -281,6 +288,10 @@ impl<'a> Iterator for TypeEntryIterator<'a> {
     type Item = Result<TypeEntry<'a>, Error>;
 
     fn next(&mut self) -> Option<Result<TypeEntry<'a>, Error>> {
+        if self.1 == 0 {
+            return None
+        }
+        self.1 -= 1;
         let form = try_opt!(read_varuint(&mut self.0));
         if form != 0x40 {
             return Some(Err(Error::UnknownVariant("type entry form")))
@@ -311,6 +322,7 @@ impl<'a> Iterator for TypeEntryIterator<'a> {
             None
         };
         Some(Ok(TypeEntry::Function(FunctionType {
+            params_count: param_count as usize,
             params_raw: params,
             return_type: return_ty
         })))
@@ -319,7 +331,7 @@ impl<'a> Iterator for TypeEntryIterator<'a> {
 
 impl<'a> FunctionType<'a> {
     pub fn params(&self) -> ParamsIterator<'a> {
-        ParamsIterator(self.params_raw)
+        ParamsIterator(self.params_raw, self.params_count)
     }
 }
 
@@ -327,8 +339,14 @@ impl<'a> Iterator for ParamsIterator<'a> {
     type Item = Result<ValueType, Error>;
 
     fn next(&mut self) -> Option<Result<ValueType, Error>> {
-        if self.0.len() < 1 {
+        if self.1 == 0 {
             return None
+        }
+        self.1 -= 1;
+        if self.0.len() < 1 {
+            return Some(Err(Error::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof, "number of params is larger than available space"
+            ))))
         }
         let res = self.0[0];
         self.0 = &self.0[1..];
@@ -338,7 +356,7 @@ impl<'a> Iterator for ParamsIterator<'a> {
 
 impl<'a> ImportSection<'a> {
     pub fn entries(&self) -> ImportEntryIterator<'a> {
-        ImportEntryIterator(self.0)
+        ImportEntryIterator(self.0, self.1)
     }
 }
 
@@ -346,6 +364,10 @@ impl<'a> Iterator for ImportEntryIterator<'a> {
     type Item = Result<ImportEntry<'a>, Error>;
 
     fn next(&mut self) -> Option<Result<ImportEntry<'a>, Error>> {
+        if self.1 == 0 {
+            return None
+        }
+        self.1 -= 1;
         let mlen = try_opt!(read_varuint(&mut self.0));
         let module = {
             let res = &self.0[..mlen as usize];
@@ -411,7 +433,7 @@ impl ResizableLimits {
 
 impl<'a> FunctionSection<'a> {
     pub fn types(&self) -> FunctionEntryIterator<'a> {
-        FunctionEntryIterator(self.0)
+        FunctionEntryIterator(self.0, self.1)
     }
 }
 
@@ -419,6 +441,10 @@ impl<'a> Iterator for FunctionEntryIterator<'a> {
     type Item = Result<u32, Error>;
 
     fn next(&mut self) -> Option<Result<u32, Error>> {
+        if self.1 == 0 {
+            return None
+        }
+        self.1 -= 1;
         Some(read_varuint(&mut self.0).map(|x| x as u32).map_err(|x| x.into()))
     }
 }
