@@ -1,5 +1,16 @@
 use leb128::read::unsigned as read_varuint;
 use std::str::from_utf8;
+use byteorder::{ReadBytesExt, LittleEndian};
+use std::io::Read;
+
+macro_rules! try_opt {
+    ($ex:expr) => {
+        match $ex {
+            Some(x) => x,
+            None => return None
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -93,17 +104,21 @@ pub struct Module<'a> {
 pub struct SectionsIterator<'a>(&'a [u8]);
 
 impl<'a> Module<'a> {
+    pub fn new(mut stream: &'a [u8]) -> Option<Module<'a>> {
+        let mut magic = [0; 4];
+        try_opt!((&mut stream).read_exact(&mut magic).ok());
+        if &magic != b"\0asm" {
+            return None
+        }
+        let version = try_opt!((&mut stream).read_u32::<LittleEndian>().ok());
+        Some(Module {
+            version: version,
+            payload: stream
+        })
+    }
+
     pub fn sections(&'a self) -> SectionsIterator<'a> {
         SectionsIterator(self.payload)
-    }
-}
-
-macro_rules! try_opt {
-    ($ex:expr) => {
-        match $ex {
-            Some(x) => x,
-            None => return None
-        }
     }
 }
 
