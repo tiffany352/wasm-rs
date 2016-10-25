@@ -100,4 +100,9 @@ pub use self::codes::{
     CodeSection, CodeIterator, FunctionBody
 };
 
+pub mod data;
+pub use self::data::{
+    DataSection, DataEntryIterator, DataEntry
+};
+
 pub mod bytecode;

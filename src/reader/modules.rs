@@ -28,6 +28,7 @@ pub enum SectionContent<'a> {
     Start(u32),
     Elements(ElementSection<'a>),
     Code(CodeSection<'a>),
+    Data(DataSection<'a>),
 }
 
 impl<'a> Module<'a> {
@@ -154,6 +155,14 @@ impl<'a> Section<'a> {
                 let mut iter = self.payload;
                 let count = try!(read_varuint(&mut iter)) as u32;
                 Ok(SectionContent::Code(CodeSection {
+                    count: count,
+                    entries_raw: iter
+                }))
+            },
+            SectionType::Data => {
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as u32;
+                Ok(SectionContent::Data(DataSection {
                     count: count,
                     entries_raw: iter
                 }))
