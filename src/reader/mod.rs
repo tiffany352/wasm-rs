@@ -105,4 +105,9 @@ pub use self::data::{
     DataSection, DataEntryIterator, DataEntry
 };
 
+pub mod names;
+pub use self::names::{
+    NameSection, NameEntryIterator, NameEntry
+};
+
 pub mod bytecode;
