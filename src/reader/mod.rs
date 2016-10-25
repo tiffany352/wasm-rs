@@ -90,4 +90,9 @@ pub use self::exports::{
     ExportSection, ExportEntryIterator, ExportEntry
 };
 
+pub mod elements;
+pub use self::elements::{
+    ElementSection, ElementEntryIterator, ElementEntry
+};
+
 pub mod bytecode;

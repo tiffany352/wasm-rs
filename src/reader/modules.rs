@@ -26,6 +26,7 @@ pub enum SectionContent<'a> {
     Global(GlobalSection<'a>),
     Export(ExportSection<'a>),
     Start(u32),
+    Elements(ElementSection<'a>),
 }
 
 impl<'a> Module<'a> {
@@ -139,6 +140,14 @@ impl<'a> Section<'a> {
                 let mut r = self.payload;
                 let index = try!(read_varuint(&mut r));
                 Ok(SectionContent::Start(index as u32))
+            },
+            SectionType::Element => {
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as u32;
+                Ok(SectionContent::Elements(ElementSection {
+                    count: count,
+                    entries_raw: iter
+                }))
             },
             _ => Err(Error::UnknownVariant("section type"))
         }
