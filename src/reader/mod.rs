@@ -95,4 +95,9 @@ pub use self::elements::{
     ElementSection, ElementEntryIterator, ElementEntry
 };
 
+pub mod codes;
+pub use self::codes::{
+    CodeSection, CodeIterator, FunctionBody
+};
+
 pub mod bytecode;
