@@ -85,4 +85,9 @@ pub use self::globals::{
     GlobalSection, GlobalEntryIterator, GlobalEntry
 };
 
+pub mod exports;
+pub use self::exports::{
+    ExportSection, ExportEntryIterator, ExportEntry
+};
+
 pub mod bytecode;

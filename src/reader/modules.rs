@@ -24,6 +24,7 @@ pub enum SectionContent<'a> {
     Table(TableSection<'a>),
     Memory(MemorySection<'a>),
     Global(GlobalSection<'a>),
+    Export(ExportSection<'a>),
     Start(u32),
 }
 
@@ -122,6 +123,14 @@ impl<'a> Section<'a> {
                 let mut iter = self.payload;
                 let count = try!(read_varuint(&mut iter)) as u32;
                 Ok(SectionContent::Global(GlobalSection {
+                    count: count,
+                    entries_raw: iter
+                }))
+            },
+            SectionType::Export => {
+                let mut iter = self.payload;
+                let count = try!(read_varuint(&mut iter)) as u32;
+                Ok(SectionContent::Export(ExportSection {
                     count: count,
                     entries_raw: iter
                 }))
