@@ -13,6 +13,11 @@ pub struct BrTable<'a> {
     pub default: u32,
 }
 
+pub struct BrTableArmIterator<'a> {
+    count: u32,
+    iter: &'a [u8],
+}
+
 pub struct MemoryImmediate {
     pub flags: u32,
     pub offset: u32
@@ -462,5 +467,26 @@ impl<'a> Iterator for OpIterator<'a> {
             },
             x => x.to_op().expect("Missing case in instruction decoder")
         }))
+    }
+}
+
+impl<'a> BrTable<'a> {
+    pub fn arms(&self) -> BrTableArmIterator<'a> {
+        BrTableArmIterator {
+            count: self.count,
+            iter: self.raw
+        }
+    }
+}
+
+impl<'a> Iterator for BrTableArmIterator<'a> {
+    type Item = Result<u32, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count == 0 {
+            return None
+        }
+        self.count -= 1;
+        Some(Ok(try_opt!(read_varuint(&mut self.iter)) as u32))
     }
 }
