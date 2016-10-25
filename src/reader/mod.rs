@@ -43,9 +43,10 @@ quick_error! {
 }
 
 pub use leb128::read::unsigned as read_varuint;
+pub use leb128::read::signed as read_varint;
 
 pub mod enums;
-pub use self::enums::{ValueType, SectionType, ExternalKind};
+pub use self::enums::{ValueType, SectionType, ExternalKind, InlineSignatureType};
 
 pub mod types;
 pub use self::types::{
@@ -83,3 +84,5 @@ pub mod globals;
 pub use self::globals::{
     GlobalSection, GlobalEntryIterator, GlobalEntry
 };
+
+pub mod bytecode;

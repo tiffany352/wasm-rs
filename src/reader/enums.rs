@@ -76,3 +76,26 @@ impl ExternalKind {
         })
     }
 }
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum InlineSignatureType {
+    Empty = 0,
+    I32 = 1,
+    I64 = 2,
+    F32 = 3,
+    F64 = 4,
+}
+
+impl InlineSignatureType {
+    pub fn from_int(v: u8) -> Option<InlineSignatureType> {
+        Some(match v {
+            0 => InlineSignatureType::Empty,
+            1 => InlineSignatureType::I32,
+            2 => InlineSignatureType::I64,
+            3 => InlineSignatureType::F32,
+            4 => InlineSignatureType::F64,
+            _ => return None
+        })
+    }
+}
