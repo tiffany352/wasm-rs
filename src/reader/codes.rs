@@ -13,8 +13,8 @@ pub struct CodeIterator<'a> {
 }
 
 pub struct FunctionBody<'a> {
-    local_count: usize,
-    body: &'a [u8],
+    pub local_count: usize,
+    pub body: &'a [u8],
 }
 
 pub struct FunctionIterator<'a> {
@@ -51,12 +51,12 @@ impl<'a> Iterator for CodeIterator<'a> {
         }
         self.count -= 1;
         let body_size = try_opt!(read_varuint(&mut self.iter)) as usize;
-        let local_count = try_opt!(read_varuint(&mut self.iter)) as usize;
-        let body = {
+        let mut body = {
             let res = &self.iter[..body_size];
             self.iter = &self.iter[body_size..];
             res
         };
+        let local_count = try_opt!(read_varuint(&mut body)) as usize;
         Some(Ok(FunctionBody {
             local_count: local_count,
             body: body,

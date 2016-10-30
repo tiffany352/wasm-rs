@@ -97,7 +97,7 @@ pub use self::elements::{
 
 pub mod codes;
 pub use self::codes::{
-    CodeSection, CodeIterator, FunctionBody
+    CodeSection, CodeIterator, FunctionBody, FunctionPart, Local
 };
 
 pub mod data;
