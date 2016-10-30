@@ -32,12 +32,9 @@ impl<'a> Iterator for DataEntryIterator<'a> {
     type Item = Result<DataEntry<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.count == 0 {
-            return None
-        }
-        self.count -= 1;
         if let Some(mut iter) = self.opiter.take() {
             if let Some(op) = iter.next() {
+                self.iter = iter.iter;
                 self.opiter = Some(iter);
                 return Some(op.map(DataEntry::Op))
             }
@@ -46,7 +43,12 @@ impl<'a> Iterator for DataEntryIterator<'a> {
             self.iter = &self.iter[size..];
             return Some(Ok(DataEntry::Data(res)))
         }
+        if self.count == 0 {
+            return None
+        }
+        self.count -= 1;
         let index = try_opt!(read_varuint(&mut self.iter)) as u32;
+        self.opiter = Some(OpIterator::new(self.iter));
         Some(Ok(DataEntry::Index(index)))
     }
 }
