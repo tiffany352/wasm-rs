@@ -57,11 +57,13 @@ impl<'a> Iterator for SectionsIterator<'a> {
     type Item = Result<Section<'a>, Error>;
 
     fn next(&mut self) -> Option<Result<Section<'a>, Error>> {
+        if self.0.len() == 0 {
+            return None
+        }
         let id = try_opt!(read_varuint(&mut self.0));
-        let id = try_opt!(SectionType::from_int(id as u8).ok_or(Error::UnknownVariant("section type")));
         let plen = try_opt!(read_varuint(&mut self.0));
         let start = self.0.len() as u64;
-        let nlen = if id == SectionType::Named {
+        let nlen = if id == 0 {
             try_opt!(read_varuint(&mut self.0))
         } else {
             0
@@ -81,6 +83,7 @@ impl<'a> Iterator for SectionsIterator<'a> {
             self.0 = &self.0[plen as usize..];
             res
         };
+        let id = try_opt!(SectionType::from_int(id as u8).ok_or(Error::UnknownVariant("section type")));
         Some(Ok(Section {
             id: id,
             name: try_opt!(from_utf8(name)),
