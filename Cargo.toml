@@ -1,6 +1,11 @@
 [package]
 name = "wasm"
 version = "0.0.0"
+authors = ["Tiffany Bennett <tiffany@stormbit.net>"]
+description = "WebAssembly parser"
+repository = "https://github.com/tiffany352/wasm-rs"
+keywords = ["wasm", "webassembly", "parser"]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 leb128 = "0.2.1"
