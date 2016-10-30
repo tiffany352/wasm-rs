@@ -103,12 +103,12 @@ impl<'a> Section<'a> {
             SectionType::Import => {
                 let mut iter = self.payload;
                 let count = try!(read_varuint(&mut iter)) as usize;
-                Ok(SectionContent::Import(ImportSection(self.payload, count)))
+                Ok(SectionContent::Import(ImportSection(iter, count)))
             },
             SectionType::Function => {
                 let mut iter = self.payload;
                 let count = try!(read_varuint(&mut iter)) as usize;
-                Ok(SectionContent::Function(FunctionSection(self.payload, count)))
+                Ok(SectionContent::Function(FunctionSection(iter, count)))
             },
             SectionType::Table => {
                 let mut iter = self.payload;
