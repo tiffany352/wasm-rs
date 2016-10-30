@@ -82,7 +82,7 @@ pub use self::memories::{
 
 pub mod globals;
 pub use self::globals::{
-    GlobalSection, GlobalEntryIterator, GlobalEntry
+    GlobalSection, GlobalEntryIterator, GlobalEntry, GlobalEntryEither
 };
 
 pub mod exports;

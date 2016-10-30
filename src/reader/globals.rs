@@ -37,14 +37,15 @@ impl<'a> Iterator for GlobalEntryIterator<'a> {
     type Item = Result<GlobalEntryEither<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.count == 0 {
-            return None
-        }
         if let Some(mut iter) = self.opiter.take() {
             if let Some(op) = iter.next() {
+                self.iter = iter.iter;
                 self.opiter = Some(iter);
                 return Some(op.map(GlobalEntryEither::Op))
             }
+        }
+        if self.count == 0 {
+            return None
         }
         self.count -= 1;
         let mut ty = [0; 1];
