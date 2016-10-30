@@ -10,6 +10,7 @@ pub enum TypeEntry<'a> {
 }
 
 pub struct FunctionType<'a> {
+    pub form: LanguageType,
     params_count: usize,
     params_raw: &'a [u8],
     pub return_type: Option<ValueType>,
@@ -32,9 +33,9 @@ impl<'a> Iterator for TypeEntryIterator<'a> {
         }
         self.1 -= 1;
         let form = try_opt!(read_varuint(&mut self.0));
-        if form != 0x40 {
-            return Some(Err(Error::UnknownVariant("type entry form")))
-        }
+        let form = try_opt!(LanguageType::from_int(form as u8).ok_or(
+            Error::UnknownVariant("type entry form")
+        ));
         let param_count = try_opt!(read_varuint(&mut self.0));
         let params = if param_count > self.0.len() as u64 {
             return Some(Err(Error::Io(io::Error::new(
@@ -61,6 +62,7 @@ impl<'a> Iterator for TypeEntryIterator<'a> {
             None
         };
         Some(Ok(TypeEntry::Function(FunctionType {
+            form: form,
             params_count: param_count as usize,
             params_raw: params,
             return_type: return_ty

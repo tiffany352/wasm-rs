@@ -38,19 +38,19 @@ impl SectionType {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ValueType {
-    I32 = 1,
-    I64 = 2,
-    F32 = 3,
-    F64 = 4,
+    I32 = 0x7f,
+    I64 = 0x7e,
+    F32 = 0x7d,
+    F64 = 0x7c,
 }
 
 impl ValueType {
     pub fn from_int(v: u8) -> Option<ValueType> {
         Some(match v {
-            1 => ValueType::I32,
-            2 => ValueType::I64,
-            3 => ValueType::F32,
-            4 => ValueType::F64,
+            0x7f => ValueType::I32,
+            0x7e => ValueType::I64,
+            0x7d => ValueType::F32,
+            0x7c => ValueType::F64,
             _ => return None
         })
     }
@@ -95,6 +95,34 @@ impl InlineSignatureType {
             2 => InlineSignatureType::I64,
             3 => InlineSignatureType::F32,
             4 => InlineSignatureType::F64,
+            _ => return None
+        })
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum LanguageType {
+    I32 = 0x7f,
+    I64 = 0x7e,
+    F32 = 0x7d,
+    F64 = 0x7c,
+    AnyFunc = 0x70,
+    Func = 0x60,
+    /// Empty block type.
+    Void = 0x40,
+}
+
+impl LanguageType {
+    pub fn from_int(v: u8) -> Option<LanguageType> {
+        Some(match v {
+            0x7f => LanguageType::I32,
+            0x7e => LanguageType::I64,
+            0x7d => LanguageType::F32,
+            0x7c => LanguageType::F64,
+            0x70 => LanguageType::AnyFunc,
+            0x60 => LanguageType::Func,
+            0x40 => LanguageType::Void,
             _ => return None
         })
     }
